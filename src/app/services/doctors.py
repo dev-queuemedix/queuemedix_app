@@ -1,8 +1,9 @@
 from typing import Optional
-from sqlalchemy import select, func, or_, desc, asc
+from sqlalchemy import func, or_, desc, asc
 from sqlalchemy.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
-from src.app.models import Doctor, DoctorStatus
+from src.app.models import Doctor, DoctorStatus, Hospital
 from src.app.schemas import DoctorProfileUpdate
 
 
@@ -15,16 +16,20 @@ async def search_doctors(
     status: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
-    sort_by: str = "full_name",
+    sort_by: str = "last_name",
     sort_dir: str = "asc",
 ) -> dict:
-    stmt = select(Doctor)
+    stmt = select(Doctor).options(
+        selectinload(Doctor.user),
+        selectinload(Doctor.hospital).selectinload(Hospital.user),
+        selectinload(Doctor.department)
+    )
 
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(
             or_(
-                Doctor.full_name.ilike(pattern),
+                Doctor.last_name.ilike(pattern),
                 Doctor.specialization.ilike(pattern),
                 Doctor.bio.ilike(pattern),
             )
@@ -39,7 +44,7 @@ async def search_doctors(
     if status:
         stmt = stmt.where(Doctor.status == status)
 
-    order_col = getattr(Doctor, sort_by, Doctor.full_name)
+    order_col = getattr(Doctor, sort_by, Doctor.last_name)
     stmt = stmt.order_by(asc(order_col) if sort_dir ==
                          "asc" else desc(order_col))
 
@@ -60,7 +65,11 @@ async def search_doctors(
 
 async def get_all_doctors(skip: int, limit: int, session: AsyncSession):
 
-   stmt = select(Doctor).offset(skip).limit(limit)
+   stmt = select(Doctor).offset(skip).limit(limit).options(
+       selectinload(Doctor.user),
+       selectinload(Doctor.hospital).selectinload(Hospital.user),
+       selectinload(Doctor.department)
+   )
    result = await session.execute(stmt)
 
    return result.scalars().all()
@@ -69,14 +78,22 @@ async def get_all_doctors(skip: int, limit: int, session: AsyncSession):
 async def get_pending_doctors(hospital_id: str, skip: int, limit: int, session: AsyncSession):
     
     stmt = select(Doctor).where(Doctor.hospital_uid == hospital_id, 
-                                Doctor.status == DoctorStatus.UNDER_REVIEW).offset(skip).limit(limit)
+                                Doctor.status == DoctorStatus.UNDER_REVIEW).offset(skip).limit(limit).options(
+       selectinload(Doctor.user),
+       selectinload(Doctor.hospital).selectinload(Hospital.user),
+       selectinload(Doctor.department)
+   )
     result = await session.execute(stmt)
 
     return result.scalars().all()
 
 async def get_doctor(doctor_id: str, session: AsyncSession):
 
-   stmt = select(Doctor).where(Doctor.uid == doctor_id)
+   stmt = select(Doctor).where(Doctor.uid == doctor_id).options(
+       selectinload(Doctor.user),
+       selectinload(Doctor.hospital).selectinload(Hospital.user),
+       selectinload(Doctor.department)
+   )
    result = await session.execute(stmt)
 
    return result.scalar_one_or_none()
