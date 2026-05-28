@@ -95,13 +95,6 @@ class HospitalBase(BaseModel):
     hospital_ceo: str
     about: Optional[str] = None
 
-    @field_validator('hospital_name', 'full_address', 'state', 'license_number', 'phone_number', 'registration_number', 'hospital_ceo')
-    def validate_non_empty_strings(cls, value):
-        if not value or not value.strip():
-            raise ValueError(
-                'This field cannot be empty or contain only whitespace')
-        return value.strip()
-
 
 class HospitalProfileCreate(HospitalBase):
     pass
@@ -118,6 +111,15 @@ class HospitalProfileUpdate(BaseModel):
     registration_number: Optional[str] = None
     ownership_type: Optional[HospitalType] = None
     hospital_ceo: Optional[str] = None
+
+    @field_validator('hospital_name', 'full_address', 'about', 'state', 'license_number', 'phone_number', 'registration_number', 'hospital_ceo')
+    def validate_non_empty_strings(cls, value):
+        if value is None:
+            return value
+        if not value or not value.strip():
+            raise ValueError(
+                'This field cannot be empty or contain only whitespace')
+        return value.strip()
 
 
 class VerifyHospital(BaseModel):
@@ -360,9 +362,7 @@ class DepartmentUpdate(BaseModel):
 class DepartmentRead(BaseModel):
     uid: uuid.UUID
     name: str
-    hospital: "HospitalRead"
-    created_at: datetime
-    updated_at: datetime
+   
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -453,6 +453,7 @@ class UserReadMe(UserBase):
     uid: uuid.UUID
     role: UserRoles
     is_active: bool = False
+    profile_picture: Optional[str]
     created_at: datetime
     updated_at: datetime
     admin: Optional[AdminRead]

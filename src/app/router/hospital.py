@@ -48,8 +48,7 @@ async def get_all_hospitals(
     limit: int = 10,
     search: Optional[str] = None,
     location: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
-    current_user: models.User = Depends(get_current_user)
+    session: AsyncSession = Depends(get_session)
 ):
 
     hospitals = await hp_service.get_hospitals(skip, limit, session, search=search, location=location)
@@ -76,7 +75,7 @@ async def get_hospitals_by_location(
 #response_model=List[schemas.HospitalDoctors]
 
 @hp_router.get('/hospitals/{hospital_id}/doctors', status_code=status.HTTP_200_OK)
-async def view_hospital_doctors(hospital_uid: str, availability: Optional[bool], session: AsyncSession = Depends(get_session), current_user: models.User = Depends(get_current_user)):
+async def view_hospital_doctors(hospital_uid: str, availability: bool | None = None, session: AsyncSession = Depends(get_session), current_user: models.User = Depends(get_current_user)):
 
     hospital = await hp_service.get_single_hospital(hospital_uid, session)
 
