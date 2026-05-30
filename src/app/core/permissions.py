@@ -111,7 +111,11 @@ def appointment_reschedule_access(
     Restrict access to a single appointment based on current_user role.
     Returns the appointment if authorized, otherwise raises error.
     """
-    if current_user.role == UserRoles.ADMIN:
+    if  current_user.uid == current_user.patient.user_uid:
+        return appointment
+        raise errors.NotAuthorized()
+
+    elif current_user.role == UserRoles.ADMIN:
         if current_user.admin.admin_type in {AdminType.HOSPITAL_ADMIN, AdminType.DEPARTMENT_ADMIN}:
             if appointment.hospital_uid == current_user.hospital.uid:
                 return appointment
@@ -126,6 +130,8 @@ def appointment_reschedule_access(
         if appointment.doctor_uid == current_user.doctor.uid:
             return appointment
         raise errors.NotAuthorized()
+
+   
 
     raise errors.NotAuthorized()
 
@@ -254,17 +260,25 @@ def doctor_assign_access(current_user: User, appointment: Appointment) -> Appoin
 #
 
 def check_department_permission(current_user: User, hospital_uid: str):
-    """
-    Restrict creation access to Admins of the hospital or Super Admins
-    """
-    if current_user.role == UserRoles.HOSPITAL:
-        if current_user.hospital.uid == hospital_uid:
-            return
-    
-    elif current_user.admin.admin_type in {AdminType.HOSPITAL_ADMIN, AdminType.DEPARTMENT_ADMIN}:
-        if current_user.hospital.uid == hospital_uid:
-            return
-        raise errors.NotAuthorized()
+
+    # Hospital owner
+    if (
+        current_user.role == UserRoles.HOSPITAL
+        and current_user.hospital
+        and current_user.hospital.uid == hospital_uid
+    ):
+        return
+
+    # Hospital/Department admins
+    if (
+        current_user.admin
+        and current_user.admin.admin_type in {
+            AdminType.HOSPITAL_ADMIN,
+            AdminType.DEPARTMENT_ADMIN,
+        }
+        and current_user.admin.hospital_uid == hospital_uid
+    ):
+        return
 
     raise errors.NotAuthorized()
 

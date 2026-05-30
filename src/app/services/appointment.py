@@ -34,7 +34,7 @@ async def create_appointment(patient_uid: str, payload: AppointmentCreate, sessi
     # Notify hospital
     await send_notification(session, new_appt.hospital.user_uid, {
         "title": "New Appointment",
-        "body": f"You have a new appointment with {new_appt.patient.full_name}",
+        "body": f"You have a new appointment with {new_appt.patient.first_name} {new_appt.patient.last_name}",
         "data": {"appointment_uid": str(new_appt.uid)}
     })
 
@@ -251,6 +251,7 @@ async def reschedule_appointment(
     appointment.scheduled_time = payload.new_time
     appointment.status = AppointmentStatus.RESCHEDULED
     appointment.rescheduled_from = old_time  #for current state tracking
+
 
     # Log the history
     history = RescheduleHistory(

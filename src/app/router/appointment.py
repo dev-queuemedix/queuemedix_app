@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status, HTTPException
 from src.app.core.dependencies import RoleChecker, get_current_user
 from sqlalchemy.ext.asyncio.session import AsyncSession
-from src.app.schemas import AppointmentCreate, AppointmentRead, DoctorAssign, AppointmentStatusUpdate, MedicalRecordCreate, RescheduleAppointment
+from src.app.schemas import AppointmentCreate, AppointmentRead, DoctorAssign, AppointmentStatusUpdate, MedicalRecordCreate, RescheduleAppointment, AppointmentResponse
 from src.app.models import Admin, Doctor, User, Appointment, AppointmentStatus, UserRoles, AdminType
 from src.app.services import appointment as apt_service, patients as pat_service, hospital as hp_service, department as dpt_service, medical_records as med_service
 from src.app.database.main import get_session
@@ -28,9 +28,11 @@ apt_router = APIRouter(
 
 
 @apt_router.post('/appointments/new_appointment', status_code=status.HTTP_201_CREATED, response_model=AppointmentRead)
-async def add_appointment(patient_uid: str, payload: AppointmentCreate, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+async def add_appointment(payload: AppointmentCreate, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
 
     """Please note, you can not edit an appointment after creating"""
+
+    patient_uid = current_user.patient.uid
 
     patient = await pat_service.get_patient(patient_uid, session)
 
@@ -52,12 +54,12 @@ async def add_appointment(patient_uid: str, payload: AppointmentCreate, session:
                             detail="Time slot is already taken")
 
     # Check if the patient is already scheduled for an appointment
-    existing_appointment = await apt_service.get_patient_pending_appointments(
-        patient_uid, session)
+    # existing_appointment = await apt_service.get_patient_pending_appointments(
+    #     patient_uid, session)
     
-    if existing_appointment:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail="Patient already has a pending appointment")
+    # if existing_appointment:
+    #     raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+    #                         detail="Patient already has a pending appointment")
 
     # Check if the hospital exists
     hospital = await hp_service.get_single_hospital(payload.hospital_uid, session)
@@ -90,7 +92,7 @@ async def add_appointment(patient_uid: str, payload: AppointmentCreate, session:
 
 
 @apt_router.get('/appointments', status_code=status.HTTP_200_OK, response_model=List[AppointmentRead])
-async def get_appointments(status: Optional[AppointmentStatus], skip: int = 0, limit: int = 10, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+async def get_appointments(status: Optional[AppointmentStatus] = None, skip: int = 0, limit: int = 10, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
 
     # Only allow SUPER_ADMIN or ADMIN users
     if current_user.role != UserRoles.ADMIN:
@@ -171,7 +173,7 @@ async def get_all_pending_appointments(
 
 
 
-@apt_router.get('/appointments/{appointment_uid}', status_code=status.HTTP_200_OK, response_model=Appointment)
+@apt_router.get('/appointments/{appointment_uid}', status_code=status.HTTP_200_OK, response_model=AppointmentResponse)
 async def get_appointment_by_id(appointment_uid: str, session: AsyncSession = Depends(get_session), current_user: User=Depends(get_current_user)):
 
     appointment = await apt_service.get_appointment_by_id(appointment_uid, session)
@@ -245,7 +247,7 @@ async def delete_db_appointment(appointment_uid: str, session: AsyncSession = De
     await apt_service.delete_appointment(appointment_uid, session)
 
 #reschedule appointment
-@apt_router.put("/appointments/{appointment_uid}/reschedule")
+@apt_router.patch("/appointments/{appointment_uid}/reschedule")
 async def reschedule_appointment(
     appointment_uid: str,
     payload: RescheduleAppointment,
@@ -259,6 +261,8 @@ async def reschedule_appointment(
         raise errors.AppointmentNotFound()
     
     old_time = appointment.scheduled_time
+
+    patient_name = f"{current_user.patient.first_name} {current_user.patient.last_name}"
 
     # Ensure scheduled_time is in the future
     if payload.new_time <= datetime.now(timezone.utc):
@@ -278,8 +282,10 @@ async def reschedule_appointment(
 
     new_appointment = await apt_service.reschedule_appointment(appointment_uid, payload, session, current_user)
 
+    new_appointment.updated_at = datetime.now(timezone.utc)
+
     #inform the patient through email
-    mails.appointment_rescheduled(new_appointment.patient.user.email, new_appointment.patient.full_name, new_appointment.hospital.hospital_name, old_time, payload.new_time)
+    mails.appointment_rescheduled(new_appointment.patient.user.email, patient_name, new_appointment.hospital.hospital_name, old_time, payload.new_time)
 
     return {
         "message": "Appointment rescheduled successfully",
